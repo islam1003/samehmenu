@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+    <title>قائمة الطعام - Menu</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <!-- Google Font: Tajawal -->
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;600;800;900&display=swap" rel="stylesheet">
+    <!-- Alpine.js -->
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        darkbg: '#0f0f12',
+                        cardbg: '#18181c',
+                        accent: '#d97706'
+                    },
+                    fontFamily: {
+                        sans: ['Tajawal', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            font-family: 'Tajawal', sans-serif;
+            background-color: #0f0f12;
+            color: #f3f4f6;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f0f12;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #27272a;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #d97706;
+        }
+        .lightbox-img {
+            transition: transform 0.15s ease-out;
+            will-change: transform;
+        }
+    </style>
+</head>
+<body x-data="menuApp()" x-init="initApp()" class="min-h-screen flex flex-col justify-between selection:bg-amber-500 selection:text-black">
+
+    <!-- TOAST NOTIFICATION -->
+    <div x-show="toast.show" 
+         x-transition:enter="transition ease-out duration-300 transform"
+         x-transition:enter-start="opacity-0 translate-y-4"
+         x-transition:enter-end="opacity-100 translate-y-0"
+         x-transition:leave="transition ease-in duration-200 transform"
+         x-transition:leave-start="opacity-100 translate-y-0"
+         x-transition:leave-end="opacity-0 translate-y-4"
+         class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-amber-500 text-stone-950 font-bold px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-amber-300/40 text-sm"
+         style="display: none;">
+        <i class="fas fa-info-circle text-lg"></i>
+        <span x-text="toast.message"></span>
+    </div>
+
+    <!-- HEADER / BRAND BAR -->
+    <header class="sticky top-0 z-30 bg-[#0f0f12]/90 backdrop-blur-md border-b border-stone-800/80 px-4 py-3">
+        <div class="max-w-3xl mx-auto flex items-center justify-between">
+            
+            <!-- Restaurant Logo / Name -->
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-600 to-amber-400 flex items-center justify-center text-stone-950 font-black shadow-lg shadow-amber-600/20">
+                    <i class="fas fa-utensils text-lg"></i>
+                </div>
+                <div>
+                    <h1 class="font-black text-lg sm:text-xl text-stone-100 tracking-wide">قائمة الطعام</h1>
+                    <p class="text-[11px] text-stone-400 font-semibold" x-text="pages.length + ' صفحة مفعلة'"></p>
+                </div>
+            </div>
+
+            <!-- Admin Lock Icon Button (Discreet) -->
+            <div class="flex items-center gap-2">
+                <template x-if="isAdmin">
+                    <button @click="logoutAdmin()" class="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+                        <i class="fas fa-sign-out-alt"></i>
+                        <span>خروج الإدارة</span>
+                    </button>
+                </template>
+
+                <button @click="handleAdminToggle()" 
+                        class="w-10 h-10 rounded-xl flex items-center justify-center transition border"
+                        :class="isAdmin ? 'bg-amber-500 text-stone-950 border-amber-400 shadow-lg shadow-amber-500/20' : 'bg-stone-900 text-stone-400 hover:text-amber-400 border-stone-800'">
+                    <i :class="isAdmin ? 'fas fa-lock-open text-base' : 'fas fa-lock text-sm'"></i>
+                </button>
+            </div>
+
+        </div>
+    </header>
+
+    <!-- ADMIN BAR (Shown only when unlocked) -->
+    <template x-if="isAdmin">
+        <div class="bg-amber-500/10 border-b border-amber-500/30 px-4 py-3 sticky top-[61px] z-20 backdrop-blur-md">
+            <div class="max-w-3xl mx-auto flex flex-wrap items-center justify-between gap-3">
+                <div class="flex items-center gap-2 text-amber-400 text-xs font-bold">
+                    <i class="fas fa-user-shield text-base"></i>
+                    <span>وضع الإدارة نشط — يمكنك التعديل والحذف والترتيب</span>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button @click="openAddModal()" class="bg-amber-500 hover:bg-amber-400 text-stone-950 px-3.5 py-1.5 rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-md">
+                        <i class="fas fa-plus"></i>
+                        <span>إضافة صفحة جديدة</span>
+                    </button>
+                    <button @click="confirmResetData()" class="bg-stone-800 hover:bg-stone-700 text-stone-300 border border-stone-700 px-3 py-1.5 rounded-xl text-xs font-bold transition">
+                        <i class="fas fa-undo"></i>
+                        <span>إعادة ضبط</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- MAIN MENU PAGES STACK (CUSTOMER VIEW - ONLY IMAGES) -->
+    <main class="max-w-3xl mx-auto w-full px-2 sm:px-4 py-6 flex-grow space-y-6">
+
+        <!-- Loading State -->
+        <div x-show="isLoading" class="text-center py-20 space-y-3">
+            <i class="fas fa-circle-notch fa-spin text-3xl text-amber-500"></i>
+            <p class="text-stone-400 text-sm font-semibold">جاري تحميل قائمة الطعام...</p>
+        </div>
+
+        <!-- Empty State -->
+        <div x-show="!isLoading && pages.length === 0" class="text-center py-20 bg-cardbg rounded-3xl border border-dashed border-stone-800 px-4">
+            <div class="w-16 h-16 bg-stone-900 text-stone-500 rounded-2xl flex items-center justify-center mx-auto mb-4 text-2xl border border-stone-800">
+                <i class="fas fa-image"></i>
+            </div>
+            <h3 class="text-lg font-bold text-stone-200 mb-1">لا توجد صفحات في المنيو حالياً</h3>
+            <p class="text-stone-500 text-xs max-w-xs mx-auto mb-4">اضغط على زر القفل في الأعلى لإضافة صور المنيو الخاصة بمطعمك.</p>
+        </div>
+
+        <!-- Pages Stack -->
+        <template x-for="(page, index) in sortedPages" :key="page.id">
+            <div class="group relative rounded-2xl sm:rounded-3xl overflow-hidden bg-cardbg border border-stone-800/80 shadow-2xl transition-all duration-300">
+                
+                <!-- ADMIN OVERLAY CONTROLS ON EACH IMAGE -->
+                <template x-if="isAdmin">
+                    <div class="absolute top-3 left-3 right-3 z-20 flex items-center justify-between pointer-events-none">
+                        <!-- Order Badge -->
+                        <span class="bg-stone-950/80 backdrop-blur-md text-amber-400 border border-amber-500/30 text-xs px-3 py-1 rounded-xl font-bold shadow-lg pointer-events-auto">
+                            صفحة <span x-text="index + 1"></span> من <span x-text="pages.length"></span>
+                        </span>
+
+                        <!-- Action Buttons -->
+                        <div class="flex items-center gap-1.5 bg-stone-950/90 backdrop-blur-md p-1.5 rounded-2xl border border-stone-700/80 shadow-2xl pointer-events-auto">
+                            <!-- Move Up -->
+                            <button @click="movePage(index, -1)" 
+                                    :disabled="index === 0"
+                                    title="تحريك لأعلى" 
+                                    class="w-8 h-8 rounded-xl bg-stone-800 hover:bg-amber-500 hover:text-stone-950 text-stone-300 disabled:opacity-30 disabled:hover:bg-stone-800 disabled:hover:text-stone-300 flex items-center justify-center transition">
+                                <i class="fas fa-arrow-up text-xs"></i>
+                            </button>
+                            <!-- Move Down -->
+                            <button @click="movePage(index, 1)" 
+                                    :disabled="index === pages.length - 1"
+                                    title="تحريك لأسفل" 
+                                    class="w-8 h-8 rounded-xl bg-stone-800 hover:bg-amber-500 hover:text-stone-950 text-stone-300 disabled:opacity-30 disabled:hover:bg-stone-800 disabled:hover:text-stone-300 flex items-center justify-center transition">
+                                <i class="fas fa-arrow-down text-xs"></i>
+                            </button>
+                            <!-- Delete -->
+                            <button @click="deletePage(page.id)" 
+                                    title="حذف الصفحة" 
+                                    class="w-8 h-8 rounded-xl bg-red-500/20 hover:bg-red-600 text-red-400 hover:text-white flex items-center justify-center transition">
+                                <i class="fas fa-trash-alt text-xs"></i>
+                            </button>
+                        </div>
+                    </div>
+                </template>
+
+                <!-- PAGE IMAGE (CLICK TO OPEN LIGHTBOX) -->
+                <div class="relative cursor-pointer overflow-hidden bg-stone-950" @click="openLightbox(page)">
+                    <img :src="page.url" 
+                         :alt="'صفحة المنيو ' + (index + 1)" 
+                         class="w-full h-auto object-contain block group-hover:scale-[1.01] transition duration-300"
+                         loading="lazy"
+                         onerror="this.onerror=null; this.src='https://placehold.co/800x1200/18181c/d97706?text=خطأ+في+تحميل+الصورة';">
+                    
+                    <!-- Zoom Hint Overlay on Hover -->
+                    <div class="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition flex items-center justify-center pointer-events-none">
+                        <span class="bg-stone-950/80 text-amber-400 px-4 py-2 rounded-2xl text-xs font-bold border border-amber-500/30 flex items-center gap-2 backdrop-blur-md shadow-xl">
+                            <i class="fas fa-search-plus"></i>
+                            <span>انقر لتكبير الصفحة</span>
+                        </span>
+                    </div>
+                </div>
+
+            </div>
+        </template>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="py-6 border-t border-stone-800/80 text-center text-stone-500 text-xs">
+        <p>انقر على أي صورة لتكبيرها وقراءتها بوضوح 🔍</p>
+    </footer>
+
+    <!-- ================= MODALS ================= -->
+
+    <!-- 1. LIGHTBOX / FULLSCREEN ZOOM MODAL -->
+    <div x-show="lightbox.open" 
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition ease-in duration-150"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         class="fixed inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col justify-between overflow-hidden"
+         style="display: none;">
+
+        <!-- Top Lightbox Header & Controls -->
+        <div class="p-4 flex items-center justify-between z-10 bg-gradient-to-b from-black/80 to-transparent">
+            <span class="text-xs font-bold text-stone-400 bg-stone-900/80 px-3 py-1.5 rounded-xl border border-stone-800">
+                <i class="fas fa-search text-amber-500 ml-1"></i>
+                <span x-text="Math.round(lightbox.scale * 100) + '%'"></span>
+            </span>
+
+            <div class="flex items-center gap-2">
+                <!-- Zoom In -->
+                <button @click="zoomIn()" title="تكبير" class="w-10 h-10 rounded-xl bg-stone-900 text-stone-200 hover:text-amber-400 border border-stone-800 flex items-center justify-center text-sm transition">
+                    <i class="fas fa-plus"></i>
+                </button>
+                <!-- Zoom Out -->
+                <button @click="zoomOut()" title="تصغير" class="w-10 h-10 rounded-xl bg-stone-900 text-stone-200 hover:text-amber-400 border border-stone-800 flex items-center justify-center text-sm transition">
+                    <i class="fas fa-minus"></i>
+                </button>
+                <!-- Reset Zoom -->
+                <button @click="resetZoom()" title="إعادة الحجم الافتراضي" class="w-10 h-10 rounded-xl bg-stone-900 text-stone-200 hover:text-amber-400 border border-stone-800 flex items-center justify-center text-sm transition">
+                    <i class="fas fa-compress"></i>
+                </button>
+                <!-- Close -->
+                <button @click="closeLightbox()" title="إغلاق" class="w-10 h-10 rounded-xl bg-red-600/80 hover:bg-red-600 text-white flex items-center justify-center text-base transition mr-2 shadow-lg">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Zoomable & Pannable Image Area -->
+        <div class="flex-grow relative flex items-center justify-center overflow-hidden touch-none"
+             @mousedown="startPan($event)"
+             @mousemove="pan($event)"
+             @mouseup="endPan()"
+             @mouseleave="endPan()"
+             @touchstart="startPanTouch($event)"
+             @touchmove="panTouch($event)"
+             @touchend="endPan()"
+             @dblclick="toggleDoubleTapZoom()">
+            
+            <template x-if="lightbox.activePage">
+                <img :src="lightbox.activePage.url" 
+                     class="lightbox-img max-h-full max-w-full object-contain cursor-grab active:cursor-grabbing select-none"
+                     :style="`transform: translate(${lightbox.panX}px, ${lightbox.panY}px) scale(${lightbox.scale})`"
+                     alt="صورة المنيو المكبرة">
+            </template>
+        </div>
+
+        <!-- Bottom Info Bar -->
+        <div class="p-3 text-center text-[11px] text-stone-500 bg-gradient-to-t from-black/80 to-transparent">
+            يمكنك السحب للتحريك والتكبير/التصغير بسهولة
+        </div>
+    </div>
+
+
+    <!-- 2. ADMIN PIN ENTRY MODAL -->
+    <div x-show="isPinModalOpen" 
+         x-transition
+         class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+         style="display: none;">
+        
+        <div @click.away="isPinModalOpen = false" class="bg-stone-900 border border-stone-800 rounded-3xl p-6 max-w-xs w-full text-center shadow-2xl relative">
+            
+            <button @click="isPinModalOpen = false" class="absolute top-4 left-4 text-stone-500 hover:text-stone-300">
+                <i class="fas fa-times"></i>
+            </button>
+
+            <div class="w-12 h-12 bg-amber-500/20 text-amber-400 rounded-2xl flex items-center justify-center mx-auto mb-3 border border-amber-500/30">
+                <i class="fas fa-key text-xl"></i>
+            </div>
+
+            <h3 class="text-base font-black text-stone-100 mb-1">تسجيل دخول الإدارة</h3>
+            <p class="text-xs text-stone-400 mb-4">أدخل الرمز السري للتحكم بالمنيو</p>
+
+            <form @submit.prevent="verifyPin()">
+                <input type="password" 
+                       x-model="pinInput" 
+                       placeholder="• • • •" 
+                       maxlength="6" 
+                       autofocus
+                       class="w-full bg-stone-950 border border-stone-800 rounded-xl px-4 py-3 text-center text-2xl tracking-widest text-amber-400 focus:border-amber-500 outline-none mb-4">
+
+                <button type="submit" class="w-full bg-amber-500 hover:bg-amber-400 text-stone-950 font-black py-2.5 rounded-xl text-sm transition shadow-lg">
+                    دخول
+                </button>
+            </form>
+            <p class="text-[10px] text-stone-600 mt-3">الرمز الافتراضي التجريبي: <span class="font-mono text-stone-400">1234</span></p>
+        </div>
+    </div>
+
+
+    <!-- 3. ADD NEW PAGE MODAL -->
+    <div x-show="isAddModalOpen" 
+         x-transition
+         class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto"
+         style="display: none;">
+        
+        <div @click.away="isAddModalOpen = false" class="bg-stone-900 border border-stone-800 rounded-3xl p-6 max-w-md w-full shadow-2xl relative text-right">
+            
+            <button @click="isAddModalOpen = false" class="absolute top-4 left-4 text-stone-500 hover:text-stone-300">
+                <i class="fas fa-times text-lg"></i>
+            </button>
+
+            <h3 class="text-lg font-black text-amber-400 mb-4 border-b border-stone-800 pb-3 flex items-center gap-2">
+                <i class="fas fa-plus-circle"></i>
+                <span>إضافة صفحة منيو جديدة</span>
+            </h3>
+
+            <!-- Mode Selector: Upload File OR URL -->
+            <div class="flex gap-2 mb-5 p-1 bg-stone-950 rounded-xl border border-stone-800 text-xs font-bold">
+                <button type="button" 
+                        @click="addPageMode = 'file'" 
+                        class="flex-1 py-2 rounded-lg transition"
+                        :class="addPageMode === 'file' ? 'bg-amber-500 text-stone-950' : 'text-stone-400 hover:text-white'">
+                    <i class="fas fa-upload ml-1"></i> رفع صورة من الجهاز
+                </button>
+                <button type="button" 
+                        @click="addPageMode = 'url'" 
+                        class="flex-1 py-2 rounded-lg transition"
+                        :class="addPageMode === 'url' ? 'bg-amber-500 text-stone-950' : 'text-stone-400 hover:text-white'">
+                    <i class="fas fa-link ml-1"></i> رابط صورة مباشر
+                </button>
+            </div>
+
+            <!-- Mode 1: File Upload -->
+            <div x-show="addPageMode === 'file'" class="space-y-4">
+                <div class="border-2 border-dashed border-stone-700 hover:border-amber-500 rounded-2xl p-6 text-center cursor-pointer transition bg-stone-950"
+                     @click="$refs.fileInput.click()">
+                    <i class="fas fa-cloud-upload-alt text-3xl text-amber-500 mb-2"></i>
+                    <p class="text-xs font-bold text-stone-300 mb-1">اضغط هنا لاختيار صورة الصفحة</p>
+                    <p class="text-[10px] text-stone-500">يدعم صيغ JPG, PNG, WEBP (جودة عالية)</p>
+                    <input type="file" x-ref="fileInput" accept="image/*" class="hidden" @change="handleFileSelect($event)">
+                </div>
+            </div>
+
+            <!-- Mode 2: Direct URL -->
+            <div x-show="addPageMode === 'url'" class="space-y-3">
+                <label class="block text-xs font-bold text-stone-300">رابط الصورة (Image URL)</label>
+                <input type="url" 
+                       x-model="newImageUrl" 
+                       placeholder="https://example.com/menu-page.jpg" 
+                       class="w-full bg-stone-950 border border-stone-800 rounded-xl px-4 py-2.5 text-xs text-stone-100 focus:border-amber-500 outline-none">
+            </div>
+
+            <!-- Preview Selected Image -->
+            <template x-if="previewImageUrl">
+                <div class="mt-4 p-2 bg-stone-950 rounded-xl border border-stone-800 flex items-center gap-3">
+                    <img :src="previewImageUrl" class="w-14 h-14 object-cover rounded-lg border border-stone-800">
+                    <div class="text-xs text-stone-300">
+                        <p class="font-bold text-amber-400">معاينة الصورة</p>
+                        <p class="text-[10px] text-stone-500">جاهزة للإضافة للمنيو</p>
+                    </div>
+                </div>
+            </template>
+
+            <!-- Actions -->
+            <div class="flex items-center justify-end gap-2 mt-6 pt-3 border-t border-stone-800">
+                <button @click="isAddModalOpen = false" class="px-4 py-2 rounded-xl bg-stone-800 text-stone-300 text-xs font-bold hover:bg-stone-700 transition">
+                    إلغاء
+                </button>
+                <button @click="saveNewPage()" class="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-black shadow-lg transition">
+                    إضافة الصفحة الآن
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+
+    <!-- JAVASCRIPT LOGIC WITH INDEXEDDB -->
+    <script>
+        // IndexedDB Configuration
+        const DB_NAME = 'RestaurantMenuDB';
+        const DB_VERSION = 1;
+        const STORE_NAME = 'menu_pages';
+
+        function openIndexedDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                request.onupgradeneeded = (e) => {
+                    const db = e.target.result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME, { keyPath: 'id' });
+                    }
+                };
+                request.onsuccess = (e) => resolve(e.target.result);
+                request.onerror = (e) => reject(e.target.error);
+            });
+        }
+
+        async function getAllPagesFromDB() {
+            const db = await openIndexedDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_NAME, 'readonly');
+                const store = tx.objectStore(STORE_NAME);
+                const request = store.getAll();
+                request.onsuccess = () => resolve(request.result || []);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function savePagesToDB(pages) {
+            const db = await openIndexedDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_NAME, 'readwrite');
+                const store = tx.objectStore(STORE_NAME);
+                store.clear().onsuccess = () => {
+                    pages.forEach(p => store.put(p));
+                };
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+            });
+        }
+
+        // Sample Default High Quality Restaurant Menu Page Images
+        const DEFAULT_PAGES = [
+            {
+                id: '1',
+                order: 1,
+                url: 'https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1200&q=80'
+            },
+            {
+                id: '2',
+                order: 2,
+                url: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&w=1200&q=80'
+            },
+            {
+                id: '3',
+                order: 3,
+                url: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80'
+            }
+        ];
+
+        function menuApp() {
+            return {
+                isAdmin: false,
+                isPinModalOpen: false,
+                pinInput: '',
+                correctPin: '1234',
+
+                isLoading: true,
+                pages: [],
+
+                // Add modal
+                isAddModalOpen: false,
+                addPageMode: 'file',
+                newImageUrl: '',
+                previewImageUrl: '',
+
+                // Lightbox
+                lightbox: {
+                    open: false,
+                    activePage: null,
+                    scale: 1,
+                    panX: 0,
+                    panY: 0,
+                    isDragging: false,
+                    startX: 0,
+                    startY: 0
+                },
+
+                // Toast
+                toast: { show: false, message: '' },
+
+                async initApp() {
+                    this.isLoading = true;
+                    try {
+                        let saved = await getAllPagesFromDB();
+                        if (!saved || saved.length === 0) {
+                            this.pages = DEFAULT_PAGES;
+                            await savePagesToDB(DEFAULT_PAGES);
+                        } else {
+                            this.pages = saved;
+                        }
+                    } catch (err) {
+                        console.error('IndexedDB error:', err);
+                        this.pages = DEFAULT_PAGES;
+                    } finally {
+                        this.isLoading = false;
+                    }
+                },
+
+                get sortedPages() {
+                    return [...this.pages].sort((a, b) => a.order - b.order);
+                },
+
+                handleAdminToggle() {
+                    if (this.isAdmin) {
+                        this.logoutAdmin();
+                    } else {
+                        this.pinInput = '';
+                        this.isPinModalOpen = true;
+                    }
+                },
+
+                verifyPin() {
+                    if (this.pinInput === this.correctPin) {
+                        this.isAdmin = true;
+                        this.isPinModalOpen = false;
+                        this.showToast('تم تسجيل الدخول بنجاح كإدمن');
+                    } else {
+                        alert('رمز الدخول غير صحيح! الرمز الافتراضي هو 1234');
+                    }
+                },
+
+                logoutAdmin() {
+                    this.isAdmin = false;
+                    this.showToast('تم الخروج من وضع الإدارة');
+                },
+
+                openAddModal() {
+                    this.addPageMode = 'file';
+                    this.newImageUrl = '';
+                    this.previewImageUrl = '';
+                    this.isAddModalOpen = true;
+                },
+
+                handleFileSelect(event) {
+                    const file = event.target.files[0];
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            this.previewImageUrl = e.target.result;
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                },
+
+                async saveNewPage() {
+                    let finalUrl = this.addPageMode === 'file' ? this.previewImageUrl : this.newImageUrl;
+
+                    if (!finalUrl) {
+                        alert('يرجى اختار صورة أو إدخال رابط صورة صحيح!');
+                        return;
+                    }
+
+                    const newPage = {
+                        id: Date.now().toString(),
+                        order: this.pages.length + 1,
+                        url: finalUrl
+                    };
+
+                    this.pages.push(newPage);
+                    await savePagesToDB(this.pages);
+                    this.showToast('تمت إضافة صفحة المنيو بنجاح');
+                    this.isAddModalOpen = false;
+                },
+
+                async movePage(index, direction) {
+                    const sorted = this.sortedPages;
+                    const targetIndex = index + direction;
+
+                    if (targetIndex < 0 || targetIndex >= sorted.length) return;
+
+                    // Swap orders
+                    const tempOrder = sorted[index].order;
+                    sorted[index].order = sorted[targetIndex].order;
+                    sorted[targetIndex].order = tempOrder;
+
+                    this.pages = sorted;
+                    await savePagesToDB(this.pages);
+                    this.showToast('تم تغيير ترتيب الصفحة');
+                },
+
+                async deletePage(id) {
+                    if (confirm('هل أنت تأكد من حذف هذه الصفحة من المنيو؟')) {
+                        this.pages = this.pages.filter(p => p.id !== id);
+                        // Re-index order
+                        this.pages.forEach((p, idx) => p.order = idx + 1);
+                        await savePagesToDB(this.pages);
+                        this.showToast('تم حذف الصفحة بنجاح');
+                    }
+                },
+
+                async confirmResetData() {
+                    if (confirm('هل تريد إعادة ضبط المنيو إلى الصور الافتراضية؟')) {
+                        this.pages = DEFAULT_PAGES;
+                        await savePagesToDB(DEFAULT_PAGES);
+                        this.showToast('تمت استعادة المنيو الافتراضي');
+                    }
+                },
+
+                // Lightbox Logic
+                openLightbox(page) {
+                    this.lightbox.activePage = page;
+                    this.lightbox.scale = 1;
+                    this.lightbox.panX = 0;
+                    this.lightbox.panY = 0;
+                    this.lightbox.open = true;
+                },
+
+                closeLightbox() {
+                    this.lightbox.open = false;
+                },
+
+                zoomIn() {
+                    if (this.lightbox.scale < 4) {
+                        this.lightbox.scale += 0.4;
+                    }
+                },
+
+                zoomOut() {
+                    if (this.lightbox.scale > 0.8) {
+                        this.lightbox.scale -= 0.4;
+                        if (this.lightbox.scale <= 1) {
+                            this.lightbox.panX = 0;
+                            this.lightbox.panY = 0;
+                        }
+                    }
+                },
+
+                resetZoom() {
+                    this.lightbox.scale = 1;
+                    this.lightbox.panX = 0;
+                    this.lightbox.panY = 0;
+                },
+
+                toggleDoubleTapZoom() {
+                    if (this.lightbox.scale > 1) {
+                        this.resetZoom();
+                    } else {
+                        this.lightbox.scale = 2;
+                    }
+                },
+
+                // Pan / Dragging image when zoomed
+                startPan(e) {
+                    if (this.lightbox.scale > 1) {
+                        this.lightbox.isDragging = true;
+                        this.lightbox.startX = e.clientX - this.lightbox.panX;
+                        this.lightbox.startY = e.clientY - this.lightbox.panY;
+                    }
+                },
+                pan(e) {
+                    if (this.lightbox.isDragging && this.lightbox.scale > 1) {
+                        this.lightbox.panX = e.clientX - this.lightbox.startX;
+                        this.lightbox.panY = e.clientY - this.lightbox.startY;
+                    }
+                },
+                endPan() {
+                    this.lightbox.isDragging = false;
+                },
+
+                // Touch pan
+                startPanTouch(e) {
+                    if (e.touches.length === 1 && this.lightbox.scale > 1) {
+                        this.lightbox.isDragging = true;
+                        this.lightbox.startX = e.touches[0].clientX - this.lightbox.panX;
+                        this.lightbox.startY = e.touches[0].clientY - this.lightbox.panY;
+                    }
+                },
+                panTouch(e) {
+                    if (this.lightbox.isDragging && e.touches.length === 1 && this.lightbox.scale > 1) {
+                        this.lightbox.panX = e.touches[0].clientX - this.lightbox.startX;
+                        this.lightbox.panY = e.touches[0].clientY - this.lightbox.startY;
+                    }
+                },
+
+                showToast(msg) {
+                    this.toast.message = msg;
+                    this.toast.show = true;
+                    setTimeout(() => {
+                        this.toast.show = false;
+                    }, 3000);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
